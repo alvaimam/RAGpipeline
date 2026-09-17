@@ -2,6 +2,7 @@ import os
 import requests
 import chromadb
 import pdfplumber
+
 DOCS_DIR = "docs"
 CHUNK_SIZE = 500
 

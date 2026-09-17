@@ -1,18 +1,19 @@
+from query_transform import _generate
 import requests
 import chromadb
 
 client = chromadb.PersistentClient(path="chroma_db")
 collection = client.get_or_create_collection("my_docs")
 
-def embed(text):
+""" def embed(text):
     resp = requests.post("http://localhost:11434/api/embeddings", json={
         "model": "nomic-embed-text",
         "prompt": text
     })
-    return resp.json()["embedding"]
+    return resp.json()["embedding"] """
 
 def ask(query, n_results=4):
-    query_embedding = embed(query)
+    query_embedding = _generate(query)
     results = collection.query(query_embeddings=[query_embedding], n_results=n_results)
     chunks = results["documents"][0]
     #print(results)
