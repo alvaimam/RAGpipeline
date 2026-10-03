@@ -9,7 +9,25 @@ DOCS_DIR = "docs"
 def extract_txt(path):
     with open(path, "r", errors="ignore") as f:
         return f.read()
+    
+def chunk_text(text, chunk_size=500, overlap=50):
+    """Split text into overlapping word-based chunks."""
+    words = text.split()
+    chunks = []
+    start = 0
+    while start < len(words):
+        end = start + chunk_size
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start += chunk_size - overlap
+    return chunks    
 
+def embed(text):
+    resp = requests.post("http://localhost:11434/api/embeddings", json={
+        "model": "nomic-embed-text",
+        "prompt": text
+    })
+    return resp.json()["embedding"]
 
 def extract_with_docling(path):
     result = _docling_converter.convert(path)
