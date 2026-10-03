@@ -1,36 +1,26 @@
 import os
-import requests
 import chromadb
-import pdfplumber
 
+from docling.document_converter import DocumentConverter
+
+_docling_converter = DocumentConverter()
 DOCS_DIR = "docs"
-CHUNK_SIZE = 500
-
-def chunk_text(text, size=CHUNK_SIZE):
-    return [text[i:i+size] for i in range(0, len(text), size)]
-
-def embed(text):
-    resp = requests.post("http://localhost:11434/api/embeddings", json={
-        "model": "nomic-embed-text",
-        "prompt": text
-    })
-    return resp.json()["embedding"]
 
 def extract_txt(path):
     with open(path, "r", errors="ignore") as f:
         return f.read()
 
-def extract_pdf(path):
-    pages = []
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            pages.append(page.extract_text() or "")
-    return "\n".join(pages)
+
+def extract_with_docling(path):
+    result = _docling_converter.convert(path)
+    return result.document.export_to_markdown()
+
 
 EXTRACTORS = {
-    ".rtf": extract_txt,
-    ".pdf": extract_pdf,
+    ".txt": extract_txt,
+    ".pdf": extract_with_docling,
 }
+
 
 def extract_text(path):
     ext = os.path.splitext(path)[1].lower()
@@ -59,6 +49,3 @@ def main():
 
     collection.upsert(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
     print(f"Ingested {len(ids)} chunks from {DOCS_DIR}")
-
-if __name__ == "__main__":
-    main()
