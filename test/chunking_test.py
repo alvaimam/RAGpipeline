@@ -28,7 +28,7 @@ def test_no_words_are_lost():
     for chunk in chunks:
         all_words_in_chunks.update(chunk.split())
 
-    assert set(words) <= all_words_in_chunks  # nothing silently dropped
+    assert set(words) <= all_words_in_chunks  
 
 
 def test_consecutive_chunks_actually_overlap():
@@ -48,11 +48,9 @@ def test_zero_overlap_produces_no_duplicate_words():
     chunks = chunk_text(text, chunk_size=500, overlap=0)
 
     flat = [w for chunk in chunks for w in chunk.split()]
-    assert flat == words  # exact reconstruction, no overlap
+    assert flat == words  
 
 
 def test_overlap_greater_equal_chunk_size_raises_instead_of_hanging():
-    # This documents a real bug: currently this would infinite-loop.
-    # Once you add a guard clause in chunk_text, this test should pass.
     with pytest.raises(ValueError):
         chunk_text("overlap", chunk_size=10, overlap=10)
