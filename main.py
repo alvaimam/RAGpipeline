@@ -1,28 +1,15 @@
+# main.py  (query / RAG)
 from config import resolve_config
+from db import get_collection
+from defaults import DEFAULTS
+from embedding_client import get_embedding_client
 from pipeline import RAGPipeline
 
-import chromadb
-import requests
+config = resolve_config(DEFAULTS)
+embedder = get_embedding_client(config.embedding.provider, model=config.embedding.model)
+collection = get_collection(embedder)
 
-
-tenant_defaults = {
-    "query_transform": "auto",
-    "retrieval": {"n_results_per_query": 5},
-    "rerank": {"enabled": True, "top_k": 4},
-}
-
-def embed(text):
-    resp = requests.post("http://localhost:11434/api/embeddings", json={
-        "model": "nomic-embed-text",
-        "prompt": text
-    })
-    return resp.json()["embedding"]
-
-client = chromadb.PersistentClient(path="chroma_db")
-collection = client.get_or_create_collection("my_docs")
-
-config = resolve_config(tenant_defaults)
-pipeline = RAGPipeline(collection=collection, embed_fn=embed, config=config)
+pipeline = RAGPipeline(collection=collection, embed_fn=embedder.embed, config=config)
 
 if __name__ == "__main__":
     while True:

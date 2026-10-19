@@ -1,37 +1,28 @@
+# ingest.py
 import os
-import chromadb
+import logging
+from config import resolve_config
+from db import get_collection
+from defaults import DEFAULTS
+from embedding_client import get_embedding_client
 
-from docling.document_converter import DocumentConverter
-
-_docling_converter = DocumentConverter()
+logger = logging.getLogger(__name__)
 DOCS_DIR = "docs"
+
+_docling_converter = None
+
 
 def extract_txt(path):
     with open(path, "r", errors="ignore") as f:
         return f.read()
-    
-def chunk_text(text, chunk_size=500, overlap=50):
-    """Split text into overlapping word-based chunks."""
-    words = text.split()
-    chunks = []
-    start = 0
-    while start < len(words):
-        end = start + chunk_size
-        chunk = " ".join(words[start:end])
-        chunks.append(chunk)
-        start += chunk_size - overlap
-    return chunks    
 
-def embed(text):
-    resp = requests.post("http://localhost:11434/api/embeddings", json={
-        "model": "nomic-embed-text",
-        "prompt": text
-    })
-    return resp.json()["embedding"]
 
 def extract_with_docling(path):
-    result = _docling_converter.convert(path)
-    return result.document.export_to_markdown()
+    global _docling_converter
+    if _docling_converter is None:
+        from docling.document_converter import DocumentConverter
+        _docling_converter = DocumentConverter()
+    return _docling_converter.convert(path).document.export_to_markdown()
 
 
 EXTRACTORS = {
@@ -48,22 +39,59 @@ def extract_text(path):
     return extractor(path)
 
 
-def main():
-    client = chromadb.PersistentClient(path="chroma_db")
-    collection = client.get_or_create_collection("my_docs")
+def load_document(path):
+    try:
+        content = extract_text(path)
+    except ValueError as e:
+        logger.warning("Skipping %s: %s", path, e)
+        return None
+    if not content.strip():
+        logger.warning("Skipping %s: no text extracted", path)
+        return None
+    return content
 
+
+def chunk_text(text, chunk_size=500, overlap=50):
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk_size")
+    words = text.split()
+    chunks = []
+    start = 0
+    while start < len(words):
+        chunks.append(" ".join(words[start:start + chunk_size]))
+        start += chunk_size - overlap
+    return chunks
+
+
+def ingest_directory(docs_dir, collection, embed_fn):
     ids, embeddings, texts, metadatas = [], [], [], []
-    for fname in os.listdir(DOCS_DIR):
-        path = os.path.join(DOCS_DIR, fname)
+    for fname in os.listdir(docs_dir):
+        path = os.path.join(docs_dir, fname)
         if not os.path.isfile(path):
             continue
 
-        content = extract_text(path)
+        content = load_document(path)
+        if content is None:
+            continue
         for i, chunk in enumerate(chunk_text(content)):
             ids.append(f"{fname}-{i}")
-            embeddings.append(embed(chunk))
+            embeddings.append(embed_fn(chunk))
             texts.append(chunk)
             metadatas.append({"source": fname})
 
-    collection.upsert(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
-    print(f"Ingested {len(ids)} chunks from {DOCS_DIR}")
+    if ids:
+        collection.upsert(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
+    return len(ids)
+
+
+def main():
+    config = resolve_config(DEFAULTS)
+    embedder = get_embedding_client(config.embedding.provider, model=config.embedding.model)
+    collection = get_collection(embedder)
+    count = ingest_directory(DOCS_DIR, collection, embedder.embed)
+    print(f"Ingested {count} chunks from {DOCS_DIR}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    main()
